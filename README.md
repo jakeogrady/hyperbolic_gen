@@ -21,4 +21,4 @@ Clearly demonstrates cases where the perspectivity mapping is undefined, offerin
 
 # Example of the Visualizer
 
-![visualizer](Screen Recording 2025-11-20 at 15.58.21.gif)
+![visualizer](visualizer.gif)
