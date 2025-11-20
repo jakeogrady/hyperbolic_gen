@@ -50,9 +50,9 @@ def plotly_planes_with_projective_map():
     y = np.linspace(-5,5,50)
     Xg, Yg = np.meshgrid(x, y)
 
-    # Plane Π coefficients: z = a1*x + b1*y + c1
-    a1, b1, c1 = 1.0, 2.0, 3.0
-    # Plane Π0 coefficients: z = a2*x + b2*y + c2
+    # Plane Π coefficients: z = a1*x + b1*y + c1 (flatter)
+    a1, b1, c1 = 0.5, 0.3, 3.0
+    # Plane Π0 coefficients
     a2, b2, c2 = -0.5, 1.0, 6.0
 
     Z1 = a1*Xg + b1*Yg + c1
