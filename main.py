@@ -19,16 +19,28 @@ def rotation_matrix_y(theta_deg):
     ])
 
 # --- Triangle plane with adjustable length and width ---
-def triangle_plane_controlled(L_start, L_end, O, alpha=1.5, beta=0.6):
-    v_start = L_start - O
-    v_end = L_end - O
-    L_start_scaled = O + beta * v_start
-    L_end_scaled = O + beta * v_end
-    L_start_ext = O + alpha * (L_start_scaled - O)
-    L_end_ext = O + alpha * (L_end_scaled - O)
-    X = np.array([O[0], L_start_ext[0], L_end_ext[0]])
-    Y = np.array([O[1], L_start_ext[1], L_end_ext[1]])
-    Z = np.array([O[2], L_start_ext[2], L_end_ext[2]])
+def triangle_plane_controlled(O, L_start, length=20.0, width=5.5):
+    # direction from O toward the line
+    v = L_start - O
+    v = v / np.linalg.norm(v)
+
+    # make a perpendicular direction for width
+    tmp = np.array([0, 0, 1])
+    if abs(np.dot(tmp, v)) > 0.9:
+        tmp = np.array([0, 1, 0])
+
+    w = np.cross(v, tmp)
+    w = w / np.linalg.norm(w)
+
+    # triangle vertices
+    A = O
+    B = O + v * length
+    C = O + v * length + w * width
+
+    X = np.array([A[0], B[0], C[0]])
+    Y = np.array([A[1], B[1], C[1]])
+    Z = np.array([A[2], B[2], C[2]])
+
     return X, Y, Z
 
 # --- Intersection of triangle with arbitrary plane ---
@@ -60,14 +72,14 @@ def plotly_planes_with_dynamic_green_line():
     Xg, Yg = np.meshgrid(x, y)
 
     # Plane coefficients
-    a1, b1, c1 = 0.5, 0.3, 3.0  # Blue plane Π
+    a1, b1, c1 = 0.5, 0.3, 4.0  # Blue plane Π
     a2, b2, c2 = -0.5, 1.0, 6.0 # Red plane Π₀ (NOT rotating)
 
     Z1 = a1*Xg + b1*Yg + c1
     Z2 = a2*Xg + b2*Yg + c2  # <- stays fixed!
 
     # Fixed point O
-    O = np.array([3.0, 1.0, 2.0])
+    O = np.array([10.0, 1.0, -3.0])
 
     # Base line for triangle edges (rotated later)
     L1_start = np.array([-3, -3, a1*(-3)+b1*(-3)+c1])
@@ -111,8 +123,7 @@ def plotly_planes_with_dynamic_green_line():
         L_end_rot = L_rot[-1]
 
         # Compute yellow triangle
-        X_y, Y_y, Z_y = triangle_plane_controlled(L_start_rot, L_end_rot, O,
-                                                  alpha=2.5, beta=0.6)
+        X_y, Y_y, Z_y = triangle_plane_controlled(O, L_start_rot)
 
         mesh_plane = go.Mesh3d(
             x=X_y, y=Y_y, z=Z_y,
