@@ -33,10 +33,6 @@ def triangle_plane_controlled(L_start, L_end, O, alpha=1.5, beta=0.6):
 
 # --- Intersection of triangle with arbitrary plane ---
 def green_line_on_plane_dynamic(A, B, C, n_plane, P_plane):
-    """
-    Intersection of triangle ABC with a plane defined by normal n_plane and point P_plane.
-    Returns two points on the plane where the triangle intersects it.
-    """
     def intersect_edge(P1, P2):
         u = P2 - P1
         denom = np.dot(n_plane, u)
@@ -65,52 +61,66 @@ def plotly_planes_with_dynamic_green_line():
 
     # Plane coefficients
     a1, b1, c1 = 0.5, 0.3, 3.0  # Blue plane Π
-    a2, b2, c2 = -0.5, 1.0, 6.0 # Red plane Π₀
+    a2, b2, c2 = -0.5, 1.0, 6.0 # Red plane Π₀ (NOT rotating)
 
     Z1 = a1*Xg + b1*Yg + c1
-    Z2 = a2*Xg + b2*Yg + c2
+    Z2 = a2*Xg + b2*Yg + c2  # <- stays fixed!
 
     # Fixed point O
     O = np.array([3.0, 1.0, 2.0])
+
+    # Base line for triangle edges (rotated later)
     L1_start = np.array([-3, -3, a1*(-3)+b1*(-3)+c1])
     L1_end   = np.array([ 3,  3, a1*(3)+b1*(3)+c1])
     line_pts = np.linspace(L1_start, L1_end, 20)
 
+    # Base figure (frame 0)
     fig = go.Figure()
-    fig.add_trace(go.Surface(x=Xg, y=Yg, z=Z1, colorscale='Blues', opacity=0.7, name='Π'))
-    fig.add_trace(go.Surface(x=Xg, y=Yg, z=Z2, colorscale='Reds', opacity=0.7, name='Π₀'))
-    fig.add_trace(go.Scatter3d(x=[O[0]], y=[O[1]], z=[O[2]],
-                               mode="markers", marker=dict(size=6,color="black"), name="O"))
-    fig.add_trace(go.Mesh3d(x=[0,0,0], y=[0,0,0], z=[0,0,0], color='yellow', opacity=0.5, name='Yellow plane'))
-    fig.add_trace(go.Scatter3d(x=[0,0], y=[0,0], z=[0,0], mode='lines',
-                               line=dict(color='green', width=5), name='Intersection'))
 
+    fig.add_trace(go.Surface(x=Xg, y=Yg, z=Z1, colorscale='Blues', opacity=0.7, name='Π'))
+    fig.add_trace(go.Surface(x=Xg, y=Yg, z=Z2, colorscale='Reds', opacity=0.7, name='Π₀'))  # stays fixed
+    fig.add_trace(go.Scatter3d(x=[O[0]], y=[O[1]], z=[O[2]], mode="markers",
+                               marker=dict(size=6,color="black"), name="O"))
+
+    fig.add_trace(go.Mesh3d(x=[0,0,0], y=[0,0,0], z=[0,0,0],
+                            color='yellow', opacity=0.5, name='Yellow plane'))
+    fig.add_trace(go.Scatter3d(x=[0,0], y=[0,0], z=[0,0],
+                               mode='lines', line=dict(color='green', width=5),
+                               name='Intersection'))
+
+    # Animation frames
     angles = np.linspace(0,180,20)
     frames = []
 
     for angle in angles:
         R = rotation_matrix_y(angle)
 
-        # Rotate blue plane points and normal
+        # Rotated blue plane (Π rotates)
         n_blue = np.array([-a1,-b1,1])
         n_blue_rot = R @ n_blue
         P_blue_rot = R @ np.array([0,0,c1])
 
-        # Rotate blue plane grid
         X1_rot, Y1_rot, Z1_rot = rotate_points(Xg, Yg, Z1, R)
-        # Rotate red plane grid
-        X2_rot, Y2_rot, Z2_rot = rotate_points(Xg, Yg, Z2, R)
 
-        # Rotate line
+        # Red plane DOES NOT rotate
+        X2_rot, Y2_rot, Z2_rot = Xg, Yg, Z2
+
+        # Rotate the edge line
         L_rot = np.array([R @ pt for pt in line_pts])
         L_start_rot = L_rot[0]
         L_end_rot = L_rot[-1]
 
-        # Yellow triangle plane
-        X_y, Y_y, Z_y = triangle_plane_controlled(L_start_rot, L_end_rot, O, alpha=2.5, beta=0.6)
-        mesh_plane = go.Mesh3d(x=X_y, y=Y_y, z=Z_y, color='yellow', opacity=0.5, i=[0], j=[1], k=[2], name='Yellow plane')
+        # Compute yellow triangle
+        X_y, Y_y, Z_y = triangle_plane_controlled(L_start_rot, L_end_rot, O,
+                                                  alpha=2.5, beta=0.6)
 
-        # Compute green line dynamically on rotated blue plane
+        mesh_plane = go.Mesh3d(
+            x=X_y, y=Y_y, z=Z_y,
+            color='yellow', opacity=0.5,
+            i=[0], j=[1], k=[2], name='Yellow plane'
+        )
+
+        # Compute the green intersection line with the ROTATED blue plane
         P1, P2 = green_line_on_plane_dynamic(
             np.array([X_y[0],Y_y[0],Z_y[0]]),
             np.array([X_y[1],Y_y[1],Z_y[1]]),
@@ -119,32 +129,48 @@ def plotly_planes_with_dynamic_green_line():
         )
 
         if P1 is not None and P2 is not None:
-            green_line = go.Scatter3d(x=[P1[0], P2[0]], y=[P1[1], P2[1]], z=[P1[2], P2[2]],
-                                       mode='lines', line=dict(color='green', width=5), name='Intersection')
+            green_line = go.Scatter3d(
+                x=[P1[0], P2[0]], y=[P1[1], P2[1]], z=[P1[2], P2[2]],
+                mode='lines', line=dict(color='green', width=5)
+            )
         else:
-            green_line = go.Scatter3d(x=[0,0], y=[0,0], z=[0,0], mode='lines', line=dict(color='green', width=5))
+            green_line = go.Scatter3d(
+                x=[0,0], y=[0,0], z=[0,0],
+                mode='lines', line=dict(color='green', width=5)
+            )
 
-        frames.append(go.Frame(name=f"f-{angle:.1f}",
-                               data=[
-                                   go.Surface(x=X1_rot, y=Y1_rot, z=Z1_rot, showscale=False, opacity=0.7),
-                                   go.Surface(x=X2_rot, y=Y2_rot, z=Z2_rot, showscale=False, opacity=0.7),
-                                   go.Scatter3d(x=[O[0]], y=[O[1]], z=[O[2]], mode="markers",
-                                                marker=dict(size=6,color="black")),
-                                   mesh_plane,
-                                   green_line
-                               ]))
+        frames.append(go.Frame(
+            name=f"f-{angle:.1f}",
+            data=[
+                go.Surface(x=X1_rot, y=Y1_rot, z=Z1_rot, showscale=False, opacity=0.7),
+                go.Surface(x=X2_rot, y=Y2_rot, z=Z2_rot, showscale=False, opacity=0.7),  # <- stays fixed
+                go.Scatter3d(x=[O[0]], y=[O[1]], z=[O[2]],
+                             mode="markers", marker=dict(size=6,color="black")),
+                mesh_plane,
+                green_line
+            ]
+        ))
 
     fig.frames = frames
-    slider = dict(active=0, currentvalue={"prefix":"Rotation angle: "}, x=0.1, y=0.05, len=0.8,
-                  steps=[dict(label=f"{a:.1f}", method="animate",
-                              args=[[f"f-{a:.1f}"], {"frame":{"duration":0,"redraw":True},"mode":"immediate"}])
-                         for a in angles])
 
-    fig.update_layout(sliders=[slider],
-                      scene=dict(xaxis=dict(range=[-10,10]),
-                                 yaxis=dict(range=[-10,10]),
-                                 zaxis=dict(range=[-20,20]),
-                                 aspectmode='cube'))
+    fig.update_layout(
+        sliders=[dict(
+            active=0,
+            currentvalue={"prefix": "Rotation angle: "},
+            steps=[dict(
+                label=f"{a:.1f}",
+                method="animate",
+                args=[[f"f-{a:.1f}"],
+                      {"frame":{"duration":0,"redraw":True}, "mode":"immediate"}]
+            ) for a in angles]
+        )],
+        scene=dict(
+            xaxis=dict(range=[-10,10]),
+            yaxis=dict(range=[-10,10]),
+            zaxis=dict(range=[-20,20]),
+            aspectmode='cube'
+        )
+    )
 
     fig.show()
 
