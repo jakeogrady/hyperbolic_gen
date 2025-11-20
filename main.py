@@ -18,104 +18,123 @@ def rotation_matrix_y(theta_deg):
         [-np.sin(theta), 0, np.cos(theta)]
     ])
 
-# --- Projective map f ---
-def project_point_to_plane(O, X, n0, d0):
-    direction = X - O
-    denom = np.dot(n0, direction)
-    if np.abs(denom) < 1e-12:
-        return None
-    t = (d0 - np.dot(n0, O)) / denom
-    return O + t * direction
-
-def line_on_plane_via_projection(O, line_pts, n0, d0):
-    L0 = [project_point_to_plane(O, X, n0, d0) for X in line_pts]
-    L0 = np.array([p if p is not None else [np.nan,np.nan,np.nan] for p in L0])
-    return L0
-
-# --- Triangle plane through line and point O ---
-def triangle_plane_through_line_and_point(L_start, L_end, O):
-    """
-    Return three points forming a triangle plane through line (L_start,L_end) and point O
-    Suitable for go.Mesh3d in Plotly.
-    """
-    X = np.array([L_start[0], L_end[0], O[0]])
-    Y = np.array([L_start[1], L_end[1], O[1]])
-    Z = np.array([L_start[2], L_end[2], O[2]])
+# --- Triangle plane with adjustable length and width ---
+def triangle_plane_controlled(L_start, L_end, O, alpha=1.5, beta=0.6):
+    v_start = L_start - O
+    v_end = L_end - O
+    L_start_scaled = O + beta * v_start
+    L_end_scaled = O + beta * v_end
+    L_start_ext = O + alpha * (L_start_scaled - O)
+    L_end_ext = O + alpha * (L_end_scaled - O)
+    X = np.array([O[0], L_start_ext[0], L_end_ext[0]])
+    Y = np.array([O[1], L_start_ext[1], L_end_ext[1]])
+    Z = np.array([O[2], L_start_ext[2], L_end_ext[2]])
     return X, Y, Z
 
-# --- Main plotting ---
-def plotly_planes_with_projective_map():
+# --- Intersection of triangle with arbitrary plane ---
+def green_line_on_plane_dynamic(A, B, C, n_plane, P_plane):
+    """
+    Intersection of triangle ABC with a plane defined by normal n_plane and point P_plane.
+    Returns two points on the plane where the triangle intersects it.
+    """
+    def intersect_edge(P1, P2):
+        u = P2 - P1
+        denom = np.dot(n_plane, u)
+        if abs(denom) < 1e-12:
+            return None
+        t = np.dot(n_plane, P_plane - P1) / denom
+        if 0 <= t <= 1:
+            return P1 + t*u
+        return None
+
+    points = []
+    for edge in [(A,B),(B,C),(C,A)]:
+        p = intersect_edge(edge[0], edge[1])
+        if p is not None:
+            points.append(p)
+    if len(points) >= 2:
+        return points[0], points[1]
+    return None, None
+
+# --- Main animation ---
+def plotly_planes_with_dynamic_green_line():
     # Grid for planes
     x = np.linspace(-5,5,50)
     y = np.linspace(-5,5,50)
     Xg, Yg = np.meshgrid(x, y)
 
-    # Plane Π coefficients: z = a1*x + b1*y + c1 (flatter)
-    a1, b1, c1 = 0.5, 0.3, 3.0
-    # Plane Π0 coefficients
-    a2, b2, c2 = -0.5, 1.0, 6.0
+    # Plane coefficients
+    a1, b1, c1 = 0.5, 0.3, 3.0  # Blue plane Π
+    a2, b2, c2 = -0.5, 1.0, 6.0 # Red plane Π₀
 
     Z1 = a1*Xg + b1*Yg + c1
     Z2 = a2*Xg + b2*Yg + c2
 
     # Fixed point O
     O = np.array([3.0, 1.0, 2.0])
-
-    # Line L on Π (diagonal)
     L1_start = np.array([-3, -3, a1*(-3)+b1*(-3)+c1])
     L1_end   = np.array([ 3,  3, a1*(3)+b1*(3)+c1])
     line_pts = np.linspace(L1_start, L1_end, 20)
 
-    # Plane Π0 normal and offset (z - a2*x - b2*y = c2)
-    n0 = np.array([-a2,-b2,1])
-    d0 = c2
-
-    # Create figure
     fig = go.Figure()
     fig.add_trace(go.Surface(x=Xg, y=Yg, z=Z1, colorscale='Blues', opacity=0.7, name='Π'))
     fig.add_trace(go.Surface(x=Xg, y=Yg, z=Z2, colorscale='Reds', opacity=0.7, name='Π₀'))
     fig.add_trace(go.Scatter3d(x=[O[0]], y=[O[1]], z=[O[2]],
                                mode="markers", marker=dict(size=6,color="black"), name="O"))
+    fig.add_trace(go.Mesh3d(x=[0,0,0], y=[0,0,0], z=[0,0,0], color='yellow', opacity=0.5, name='Yellow plane'))
+    fig.add_trace(go.Scatter3d(x=[0,0], y=[0,0], z=[0,0], mode='lines',
+                               line=dict(color='green', width=5), name='Intersection'))
 
-    # Placeholder for yellow triangle plane
-    fig.add_trace(go.Mesh3d(x=[0,0,0], y=[0,0,0], z=[0,0,0],
-                            color='yellow', opacity=0.5, name='Yellow plane'))
-
-    # Animation frames
     angles = np.linspace(0,180,20)
     frames = []
 
     for angle in angles:
         R = rotation_matrix_y(angle)
-        X1_rot, Y1_rot, Z1_rot = rotate_points(Xg, Yg, Z1, R)
 
-        # Rotate line L
+        # Rotate blue plane points and normal
+        n_blue = np.array([-a1,-b1,1])
+        n_blue_rot = R @ n_blue
+        P_blue_rot = R @ np.array([0,0,c1])
+
+        # Rotate blue plane grid
+        X1_rot, Y1_rot, Z1_rot = rotate_points(Xg, Yg, Z1, R)
+        # Rotate red plane grid
+        X2_rot, Y2_rot, Z2_rot = rotate_points(Xg, Yg, Z2, R)
+
+        # Rotate line
         L_rot = np.array([R @ pt for pt in line_pts])
         L_start_rot = L_rot[0]
         L_end_rot = L_rot[-1]
 
-        # Yellow triangle plane through O and rotated L
-        X_y, Y_y, Z_y = triangle_plane_through_line_and_point(L_start_rot, L_end_rot, O)
+        # Yellow triangle plane
+        X_y, Y_y, Z_y = triangle_plane_controlled(L_start_rot, L_end_rot, O, alpha=2.5, beta=0.6)
+        mesh_plane = go.Mesh3d(x=X_y, y=Y_y, z=Z_y, color='yellow', opacity=0.5, i=[0], j=[1], k=[2], name='Yellow plane')
 
-        mesh_plane = go.Mesh3d(
-            x=X_y, y=Y_y, z=Z_y,
-            color='yellow', opacity=0.5,
-            i=[0], j=[1], k=[2],
-            name='Yellow plane'
+        # Compute green line dynamically on rotated blue plane
+        P1, P2 = green_line_on_plane_dynamic(
+            np.array([X_y[0],Y_y[0],Z_y[0]]),
+            np.array([X_y[1],Y_y[1],Z_y[1]]),
+            np.array([X_y[2],Y_y[2],Z_y[2]]),
+            n_blue_rot, P_blue_rot
         )
+
+        if P1 is not None and P2 is not None:
+            green_line = go.Scatter3d(x=[P1[0], P2[0]], y=[P1[1], P2[1]], z=[P1[2], P2[2]],
+                                       mode='lines', line=dict(color='green', width=5), name='Intersection')
+        else:
+            green_line = go.Scatter3d(x=[0,0], y=[0,0], z=[0,0], mode='lines', line=dict(color='green', width=5))
 
         frames.append(go.Frame(name=f"f-{angle:.1f}",
                                data=[
                                    go.Surface(x=X1_rot, y=Y1_rot, z=Z1_rot, showscale=False, opacity=0.7),
-                                   go.Surface(x=Xg, y=Yg, z=Z2, showscale=False, opacity=0.7),
-                                   go.Scatter3d(x=[O[0]], y=[O[1]], z=[O[2]],
-                                                mode="markers", marker=dict(size=6,color="black")),
-                                   mesh_plane
+                                   go.Surface(x=X2_rot, y=Y2_rot, z=Z2_rot, showscale=False, opacity=0.7),
+                                   go.Scatter3d(x=[O[0]], y=[O[1]], z=[O[2]], mode="markers",
+                                                marker=dict(size=6,color="black")),
+                                   mesh_plane,
+                                   green_line
                                ]))
 
     fig.frames = frames
-
-    # Slider
     slider = dict(active=0, currentvalue={"prefix":"Rotation angle: "}, x=0.1, y=0.05, len=0.8,
                   steps=[dict(label=f"{a:.1f}", method="animate",
                               args=[[f"f-{a:.1f}"], {"frame":{"duration":0,"redraw":True},"mode":"immediate"}])
@@ -130,4 +149,4 @@ def plotly_planes_with_projective_map():
     fig.show()
 
 if __name__ == "__main__":
-    plotly_planes_with_projective_map()
+    plotly_planes_with_dynamic_green_line()
